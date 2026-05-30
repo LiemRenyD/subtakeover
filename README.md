@@ -133,15 +133,6 @@ All application logic lives under `internal/` to prevent external import. Each p
 
 Single binary entry point using `spf13/cobra`. Each subcommand (`scan`, `monitor`, `serve`, `history`) is a separate cobra command with its own flags.
 
-## Technical Constraints
-
-This project follows strict engineering constraints defined in `CLAUDE.md`:
-
-- **SQLite:** Pure Go `glebarez/sqlite` driver with GORM (zero CGO — enables seamless cross-compilation)
-- **Concurrency:** All external I/O throttled via `golang.org/x/time/rate` with buffered channel pools
-- **DNS:** `miekg/dns` with NXDOMAIN handling, CNAME loop detection (max depth 5), 3-second timeout
-- **HTTP:** Custom `http.Client` with `InsecureSkipVerify: true` and host-preserving `CheckRedirect`
-- **Frontend:** `go:embed` with SPA fallback routing (all unknown paths redirected to `index.html`)
 
 ## Fingerprint Rules
 
