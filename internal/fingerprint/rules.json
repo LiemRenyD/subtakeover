@@ -1,0 +1,76 @@
+[
+  {
+    "service": "AWS S3",
+    "cname_patterns": ["s3.amazonaws.com", "s3-*.amazonaws.com", "*.s3.amazonaws.com"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "NoSuchBucket"},
+      {"status": 403, "body_contains": "AccessDenied"},
+      {"status": 404, "body_contains": "The specified bucket does not exist"}
+    ],
+    "risk_level": "high",
+    "remediation": "Delete the dangling CNAME record or claim the S3 bucket"
+  },
+  {
+    "service": "GitHub Pages",
+    "cname_patterns": ["*.github.io"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "There isn't a GitHub Pages site here"}
+    ],
+    "risk_level": "high",
+    "remediation": "Remove the CNAME record or set up a GitHub Pages site"
+  },
+  {
+    "service": "Azure CDN",
+    "cname_patterns": ["*.azureedge.net", "*.vo.msecnd.net"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "The requested content does not exist"}
+    ],
+    "risk_level": "medium",
+    "remediation": "Remove the CNAME or create the Azure CDN endpoint"
+  },
+  {
+    "service": "Heroku",
+    "cname_patterns": ["*.herokuapp.com", "*.herokudns.com"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "No such app"}
+    ],
+    "risk_level": "high",
+    "remediation": "Remove the CNAME record or create the Heroku app"
+  },
+  {
+    "service": "Netlify",
+    "cname_patterns": ["*.netlify.app", "*.netlify.com"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "Not Found"}
+    ],
+    "risk_level": "high",
+    "remediation": "Remove the CNAME record or create the Netlify site"
+  },
+  {
+    "service": "Shopify",
+    "cname_patterns": ["*.myshopify.com"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "Sorry, this shop is currently unavailable"}
+    ],
+    "risk_level": "high",
+    "remediation": "Remove the CNAME or claim the Shopify store"
+  },
+  {
+    "service": "Fastly",
+    "cname_patterns": ["*.fastly.net", "*.global.prod.fastly.net"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "Fastly error: unknown domain"}
+    ],
+    "risk_level": "medium",
+    "remediation": "Remove the CNAME or configure the Fastly service"
+  },
+  {
+    "service": "CloudFront",
+    "cname_patterns": ["*.cloudfront.net"],
+    "http_fingerprints": [
+      {"status": 404, "body_contains": "The request could not be satisfied"}
+    ],
+    "risk_level": "high",
+    "remediation": "Remove the CNAME record or set up the CloudFront distribution"
+  }
+]

@@ -1,0 +1,10 @@
+/subtakeover
+/subtakeover-*
+/subtakeover.exe
+*.db
+*.db-wal
+*.db-shm
+*.exe~
+*.tar
+report.md
+.gstack/

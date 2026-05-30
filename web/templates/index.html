@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SubTakeover — Attack Surface Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/vis-data@7.1.9/peer/umd/vis-data.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.2/peer/umd/vis-network.min.js"></script>
+<script>
+// Fallback if CDN fails
+if (typeof vis === 'undefined') {
+  document.write('<script src="https://unpkg.com/vis-network@9.1.2/peer/umd/vis-network.min.js"><\/script>');
+  document.write('<script src="https://unpkg.com/vis-data@7.1.9/peer/umd/vis-data.min.js"><\/script>');
+}
+</script>
+<style>
+  :root {
+    --bg-primary: #0a0e14;
+    --bg-secondary: #12161e;
+    --bg-card: #181c26;
+    --bg-table-header: #1a1f2e;
+    --bg-table-row: #181c26;
+    --bg-table-row-alt: #1d2230;
+    --border: #252a36;
+    --text-primary: #e4e8f0;
+    --text-secondary: #8b92a5;
+    --text-muted: #5c6378;
+    --accent: #00d4aa;
+    --accent-glow: rgba(0, 212, 170, 0.15);
+    --danger: #ff3b5c;
+    --danger-glow: rgba(255, 59, 92, 0.15);
+    --warning: #f0a040;
+    --warning-glow: rgba(240, 160, 64, 0.15);
+    --info: #4da6ff;
+    --info-glow: rgba(77, 166, 255, 0.15);
+    --success: #00d4aa;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-glow: 0 0 20px rgba(0, 212, 170, 0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .header-brand .icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .header-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--accent-glow);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Layout */
+  .main { padding: 24px 32px 48px; max-width: 1440px; margin: 0 auto; }
+
+  /* Stats Cards */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .stat-card:hover { border-color: var(--accent); box-shadow: var(--shadow-glow); }
+  .stat-card .label {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted); margin-bottom: 8px; font-weight: 600;
+  }
+  .stat-card .value {
+    font-size: 36px; font-weight: 800; letter-spacing: -1px; line-height: 1;
+  }
+  .stat-card .subtitle {
+    font-size: 13px; color: var(--text-secondary); margin-top: 6px;
+  }
+  .stat-card .icon-bg {
+    position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+    font-size: 48px; opacity: 0.06;
+  }
+  .stat-total .value { color: var(--info); }
+  .stat-scans .value { color: var(--accent); }
+  .stat-risk .value { color: var(--danger); }
+  .stat-resolved .value { color: var(--success); }
+
+  /* Section Headers */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .section-header h2 {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.2px;
+  }
+  .badge {
+    background: var(--bg-card); border: 1px solid var(--border);
+    padding: 4px 12px; border-radius: 20px; font-size: 12px;
+    color: var(--text-secondary); font-weight: 500;
+  }
+
+  /* Data Table */
+  .table-container {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 24px;
+  }
+  .table-wrapper { overflow-x: auto; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  thead { background: var(--bg-table-header); }
+  th {
+    padding: 12px 16px; text-align: left; font-weight: 600;
+    color: var(--text-muted); text-transform: uppercase;
+    font-size: 11px; letter-spacing: 0.6px; border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tbody tr { transition: background 0.15s; }
+  tbody tr:nth-child(even) { background: var(--bg-table-row-alt); }
+  tbody tr:hover { background: rgba(0, 212, 170, 0.04); }
+  .subdomain-cell { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; }
+  .risk-high { color: var(--danger); font-weight: 700; }
+  .risk-medium { color: var(--warning); font-weight: 600; }
+  .risk-low { color: var(--success); }
+  .risk-zero { color: var(--text-muted); }
+  .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+  }
+  .tag-vuln { background: var(--danger-glow); color: var(--danger); }
+  .tag-safe { background: var(--accent-glow); color: var(--success); }
+  .tag-service {
+    background: rgba(77, 166, 255, 0.1); color: var(--info);
+  }
+  .empty-state {
+    text-align: center; padding: 48px 24px; color: var(--text-muted);
+  }
+  .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
+
+  /* Network Graph */
+  .graph-container {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 24px;
+  }
+  .graph-header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #network-graph { width: 100%; height: 420px; }
+
+  /* Footer */
+  .footer {
+    text-align: center; padding: 16px; color: var(--text-muted);
+    font-size: 12px; border-top: 1px solid var(--border);
+  }
+
+  /* Loading & Error states */
+  .loading { animation: shimmer 1.5s infinite; background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-table-row-alt) 50%, var(--bg-card) 75%); background-size: 200% 100%; border-radius: var(--radius); }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header { padding: 12px 16px; }
+    .main { padding: 16px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-card { padding: 16px; }
+    .stat-card .value { font-size: 28px; }
+    th, td { padding: 8px 10px; font-size: 12px; }
+    #network-graph { height: 300px; }
+  }
+  @media (max-width: 480px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .header-brand { font-size: 15px; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <div class="icon">&#x25C8;</div>
+    <span>SubTakeover</span>
+    <span style="color:var(--text-muted);font-weight:400;font-size:13px;">Attack Surface Monitor</span>
+  </div>
+  <div class="header-status">
+    <span class="status-dot"></span>
+    <span>System Active</span>
+    <span style="margin-left:8px;color:var(--text-muted)" id="current-time"></span>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card stat-total">
+      <div class="label">Total Subdomains</div>
+      <div class="value" id="stat-subdomains">—</div>
+      <div class="subtitle">Across all monitored domains</div>
+      <div class="icon-bg">&#x25C9;</div>
+    </div>
+    <div class="stat-card stat-scans">
+      <div class="label">Total Scans</div>
+      <div class="value" id="stat-scans">—</div>
+      <div class="subtitle" id="stat-latest-scan">Latest: —</div>
+      <div class="icon-bg">&#x25CB;</div>
+    </div>
+    <div class="stat-card stat-risk">
+      <div class="label">High-Risk Findings</div>
+      <div class="value" id="stat-vulns">—</div>
+      <div class="subtitle">Requires immediate attention</div>
+      <div class="icon-bg">&#x26A0;</div>
+    </div>
+    <div class="stat-card stat-resolved">
+      <div class="label">Monitored Domains</div>
+      <div class="value" id="stat-domains">—</div>
+      <div class="subtitle">Active surveillance targets</div>
+      <div class="icon-bg">&#x25A3;</div>
+    </div>
+  </div>
+
+  <!-- Findings Table -->
+  <div class="table-container">
+    <div class="graph-header">
+      <h2>Recent Findings</h2>
+      <span class="badge" id="finding-count">— findings</span>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Subdomain</th>
+            <th>CNAME Target</th>
+            <th>Cloud Service</th>
+            <th>Risk Level</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="findings-tbody">
+        </tbody>
+      </table>
+      <div class="empty-state" id="findings-empty" style="display:none">
+        <div class="empty-icon">&#x2714;</div>
+        <p>No findings yet. Run a scan to populate results.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Network Topology Graph -->
+  <div class="graph-container">
+    <div class="graph-header">
+      <h2>Network Topology</h2>
+      <span class="badge">Subdomain → Cloud Service Mapping</span>
+    </div>
+    <div id="network-graph"></div>
+  </div>
+
+</main>
+
+<footer class="footer">
+  SubTakeover v1.0 &middot; Attack Surface Monitoring &middot; <span id="footer-time"></span>
+</footer>
+
+<script>
+// ===========================
+// Data Fetching
+// ===========================
+async function fetchJSON(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`${url} returned ${resp.status}`);
+  return resp.json();
+}
+
+function getCNAME(cnameJSON) {
+  try {
+    const arr = JSON.parse(cnameJSON || '[]');
+    return arr.length > 0 ? arr[arr.length - 1] : '—';
+  } catch { return '—'; }
+}
+
+// ===========================
+// Stats Cards
+// ===========================
+async function loadStats() {
+  try {
+    const scans = await fetchJSON('/api/scans');
+    const findings = await fetchJSON('/api/findings');
+
+    const totalSubs = findings.reduce((s, f) => s + (f.subdomain_count || 0), 0);
+    const totalVulns = scans.reduce((s, sc) => s + (sc.vuln_count || 0), 0);
+    const domains = new Set(scans.map(s => s.domain));
+    const latest = scans[0];
+
+    document.getElementById('stat-subdomains').textContent = totalSubs || '—';
+    document.getElementById('stat-scans').textContent = scans.length;
+    document.getElementById('stat-vulns').textContent = totalVulns;
+    document.getElementById('stat-domains').textContent = domains.size || '—';
+    document.getElementById('stat-latest-scan').textContent =
+      latest ? `Latest: ${formatDate(latest.started_at)}` : 'No scans yet';
+  } catch (err) {
+    console.error('Stats load error:', err);
+  }
+}
+
+// ===========================
+// Findings Table
+// ===========================
+async function loadFindings() {
+  const tbody = document.getElementById('findings-tbody');
+  const empty = document.getElementById('findings-empty');
+  const count = document.getElementById('finding-count');
+
+  try {
+    const findings = await fetchJSON('/api/findings?limit=50');
+    if (!findings || findings.length === 0) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
+      count.textContent = '0 findings';
+      return;
+    }
+    empty.style.display = 'none';
+    count.textContent = `${findings.length} findings`;
+
+    tbody.innerHTML = findings.map(f => {
+      const cname = getCNAME(f.cname_chain);
+      const service = f.fingerprint_service || 'Unknown';
+      const risk = f.takeover_risk || 0;
+
+      let riskClass = 'risk-zero';
+      let riskLabel = risk;
+      if (risk >= 70) { riskClass = 'risk-high'; riskLabel = `HIGH (${risk})`; }
+      else if (risk >= 40) { riskClass = 'risk-medium'; riskLabel = `MED (${risk})`; }
+      else if (risk > 0) { riskClass = 'risk-low'; riskLabel = `LOW (${risk})`; }
+
+      const statusTag = f.is_vulnerable
+        ? '<span class="tag tag-vuln">VULNERABLE</span>'
+        : '<span class="tag tag-safe">SAFE</span>';
+
+      return `<tr>
+        <td class="subdomain-cell">${escapeHTML(f.subdomain)}</td>
+        <td class="subdomain-cell" style="color:var(--text-secondary)">${escapeHTML(cname)}</td>
+        <td><span class="tag tag-service">${escapeHTML(service)}</span></td>
+        <td class="${riskClass}">${riskLabel}</td>
+        <td>${statusTag}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    console.error('Findings load error:', err);
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Failed to load findings: ${err.message}</td></tr>`;
+  }
+}
+
+// ===========================
+// Network Topology Graph
+// ===========================
+async function loadGraph() {
+  try {
+    const findings = await fetchJSON('/api/findings?limit=100');
+    if (!findings || findings.length === 0) return;
+
+    const nodes = new Map();
+    const edges = [];
+    let nodeId = 0;
+
+    // Domain root nodes
+    const domainSet = new Set();
+    findings.forEach(f => {
+      const parts = f.subdomain.split('.');
+      if (parts.length >= 2) domainSet.add(parts.slice(-2).join('.'));
+    });
+
+    domainSet.forEach(d => {
+      nodes.set(d, { id: nodeId++, label: d, group: 'domain' });
+    });
+
+    // Subdomain + Service nodes
+    findings.forEach(f => {
+      const subKey = `sub:${f.subdomain}`;
+      if (!nodes.has(subKey)) {
+        nodes.set(subKey, { id: nodeId++, label: f.subdomain, group: f.is_vulnerable ? 'vuln' : 'safe' });
+      }
+
+      // Edge from domain → subdomain
+      const parts = f.subdomain.split('.');
+      const domain = parts.length >= 2 ? parts.slice(-2).join('.') : f.subdomain;
+      if (nodes.has(domain)) {
+        edges.push({ from: nodes.get(domain).id, to: nodes.get(subKey).id });
+      }
+
+      if (f.fingerprint_service) {
+        const svcKey = `svc:${f.fingerprint_service}`;
+        if (!nodes.has(svcKey)) {
+          nodes.set(svcKey, { id: nodeId++, label: f.fingerprint_service, group: 'service' });
+        }
+        edges.push({ from: nodes.get(subKey).id, to: nodes.get(svcKey).id });
+      }
+    });
+
+    const nodeArray = Array.from(nodes.values());
+    const container = document.getElementById('network-graph');
+
+    new vis.Network(container, { nodes: new vis.DataSet(nodeArray), edges: new vis.DataSet(edges) }, {
+      groups: {
+        domain: { color: { background: '#4da6ff', border: '#2d7fd9' }, font: { color: '#e4e8f0' }, shape: 'dot', size: 20 },
+        safe:   { color: { background: '#00d4aa', border: '#00a080' }, font: { color: '#e4e8f0' }, shape: 'dot', size: 10 },
+        vuln:   { color: { background: '#ff3b5c', border: '#cc0030' }, font: { color: '#ff3b5c' }, shape: 'dot', size: 14 },
+        service:{ color: { background: '#f0a040', border: '#c08020' }, font: { color: '#f0a040' }, shape: 'diamond', size: 16 }
+      },
+      edges: { color: { color: '#3a4050', highlight: '#5a6070' }, smooth: { type: 'continuous' } },
+      physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.01, springLength: 160 } },
+      interaction: { hover: true, tooltipDelay: 200 }
+    });
+  } catch (err) {
+    console.error('Graph load error:', err);
+  }
+}
+
+// ===========================
+// Helpers
+// ===========================
+function escapeHTML(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function updateTime() {
+  const now = new Date();
+  const s = now.toLocaleTimeString('en-US', { hour12: false });
+  document.getElementById('current-time').textContent = s;
+  document.getElementById('footer-time').textContent = now.toISOString().split('T')[0];
+}
+
+// ===========================
+// Init
+// ===========================
+async function init() {
+  updateTime();
+  setInterval(updateTime, 30000);
+  await Promise.all([loadStats(), loadFindings(), loadGraph()]);
+}
+
+init();
+</script>
+</body>
+</html>
